@@ -1,0 +1,122 @@
+#!/bin/zsh
+
+# variables
+
+ACTION="on"
+VERSION=82
+
+COLOR_PREFIX='\033['
+RED="${COLOR_PREFIX}1;31m"
+GREEN="${COLOR_PREFIX}0;32m"
+LIGHT_GREEN="${COLOR_PREFIX}1;32m"
+WHITE="${COLOR_PREFIX}1;37m"
+NC="${COLOR_PREFIX}0m" # No Color
+
+# functions
+
+function error {
+	echo "$RED$@$NC"
+}
+
+function info {
+	echo "$WHITE$@$NC"
+}
+
+function success {
+	echo "$GREEN$@$NC"
+}
+
+function help {
+	echo ''
+	info "PHP xdebug toggler for Herd Free"
+	success "Usage:"
+	success "➜ phpdebug <action: on|off|add|remove> [<version=82 (74|80|81|82|83)>]"
+	echo ''
+}
+
+# actual program
+
+if [[ $# -ge 1 ]]; then
+	if [[ "$1" != "on" && "$1" != "off" && "$1" != "add" && "$1" != "remove" ]]; then
+		error "Invalid action: $1"
+		help
+		exit 1
+	fi
+
+	ACTION="$1"
+fi
+
+if [[ $# -gt 2 ]]; then
+	error 'Too many arguments'
+	help
+	exit 2
+fi
+
+if [[ $# -eq 2 ]]; then
+	VERSION="$2"
+fi
+
+EXTENSION_PATH="/Applications/Herd.app/Contents/Resources/xdebug/xdebug-$VERSION-x86.so"
+
+if ! [ -f $EXTENSION_PATH ]; then
+	error "Extension could not be found at:"
+	echo "$EXTENSION_PATH"
+	exit 9;
+fi
+
+INI_DIR="~/Library/Application Support/Herd/config/php/$VERSION"
+INI_PATH="$INI_DIR/php.ini"
+
+if [ -f "$INI_PATH" ]; then
+	info 'Ini exists';
+fi
+if ! [ -f "$INI_PATH" ]; then
+	error "Ini file could not be found at:"
+	echo "$INI_PATH"
+	exit 9;
+fi
+
+EXTENSION="zend_extension=\/Applications\/Herd.app\/Contents\/Resources\/xdebug\/xdebug-$VERSION-x86.so"
+MODE='xdebug.mode=debug,develop'
+REQUEST='xdebug.start_with_request=yes'
+ON_ERROR='xdebug.start_upon_error=yes'
+
+cd $INI_DIR
+
+
+if [[ "$ACTION" == "on" ]]; then
+	info "Turning xdebug on for PHP $VERSION..."
+
+	sed -E -i -e "/$MODE/s/^#+//" php.ini
+	sed -E -i -e "/$EXTENSION/s/^#+//" php.ini
+	sed -E -i -e "/$MODE/s/^#+//" php.ini
+	sed -E -i -e "/$REQUEST/s/^#+//" php.ini
+	sed -E -i -e "/$ON_ERROR/s/^#+//" php.ini
+elif [[ "$ACTION" == "off" ]]; then
+	info "Turning xdebug off for PHP $VERSION..."
+
+	sed -i -e "/$EXTENSION/s/^/#/" php.ini
+	sed -i -e "/$MODE/s/^/#/" php.ini
+	sed -i -e "/$REQUEST/s/^/#/" php.ini
+	sed -i -e "/$ON_ERROR/s/^/#/" php.ini
+elif [[ "$ACTION" == "remove" ]]; then
+	info "Removing xdebug for PHP $VERSION..."
+
+	sed -E -i -e "/$EXTENSION/s/^.*//" php.ini
+	sed -E -i -e "/$MODE/s/^.*//" php.ini
+	sed -E -i -e "/$REQUEST/s/^.*//" php.ini
+	sed -E -i -e "/$ON_ERROR/s/^.*//" php.ini
+else
+	info "Adding xdebug lines to PHP $VERSION..."
+
+	echo "" >> php.ini
+	echo "zend_extension=$EXTENSION_PATH" >> php.ini
+	echo "$MODE" >> php.ini
+	echo "$REQUEST" >> php.ini
+	echo "$ON_ERROR" >> php.ini
+fi
+
+echo "$LIGHT_GREEN✔$GREEN Done.$NC"
+
+info "Restarting Herd..."
+herd restart
